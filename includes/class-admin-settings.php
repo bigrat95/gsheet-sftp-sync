@@ -1,0 +1,478 @@
+<?php
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class GSheet_SFTP_Admin_Settings {
+    
+    private static $instance = null;
+    
+    public static function get_instance() {
+        if (null === self::$instance) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+    
+    public function register_settings() {
+        // API Settings
+        register_setting('gsheet_sftp_settings', 'gsheet_sftp_api_key', [
+            'sanitize_callback' => 'sanitize_text_field'
+        ]);
+        
+        // SFTP Settings
+        register_setting('gsheet_sftp_settings', 'gsheet_sftp_host', [
+            'sanitize_callback' => 'sanitize_text_field'
+        ]);
+        register_setting('gsheet_sftp_settings', 'gsheet_sftp_port', [
+            'sanitize_callback' => 'absint',
+            'default' => 22
+        ]);
+        register_setting('gsheet_sftp_settings', 'gsheet_sftp_username', [
+            'sanitize_callback' => 'sanitize_text_field'
+        ]);
+        register_setting('gsheet_sftp_settings', 'gsheet_sftp_password', [
+            'sanitize_callback' => [$this, 'encrypt_password']
+        ]);
+        register_setting('gsheet_sftp_settings', 'gsheet_sftp_remote_path', [
+            'sanitize_callback' => 'sanitize_text_field',
+            'default' => '/'
+        ]);
+        
+        // Export Settings
+        register_setting('gsheet_sftp_settings', 'gsheet_sftp_schedule', [
+            'sanitize_callback' => 'sanitize_text_field',
+            'default' => 'daily'
+        ]);
+        register_setting('gsheet_sftp_settings', 'gsheet_sftp_daily_hour', [
+            'sanitize_callback' => 'absint',
+            'default' => 2
+        ]);
+        register_setting('gsheet_sftp_settings', 'gsheet_sftp_filename_mode', [
+            'sanitize_callback' => 'sanitize_text_field',
+            'default' => 'dated'
+        ]);
+        register_setting('gsheet_sftp_settings', 'gsheet_sftp_base_filename', [
+            'sanitize_callback' => 'sanitize_file_name',
+            'default' => 'sheet_export'
+        ]);
+        register_setting('gsheet_sftp_settings', 'gsheet_sftp_export_format', [
+            'sanitize_callback' => 'sanitize_text_field',
+            'default' => 'csv'
+        ]);
+    }
+    
+    public function encrypt_password($password) {
+        if (empty($password)) {
+            return get_option('gsheet_sftp_password', '');
+        }
+        // Simple obfuscation - in production, use proper encryption
+        return base64_encode($password);
+    }
+    
+    public static function get_password() {
+        $encrypted = get_option('gsheet_sftp_password', '');
+        if (empty($encrypted)) {
+            return '';
+        }
+        return base64_decode($encrypted);
+    }
+    
+    public function render_settings_page() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        
+        // Handle test connection
+        if (isset($_POST['test_sftp_connection']) && check_admin_referer('gsheet_sftp_test_connection')) {
+            $this->test_connection();
+        }
+        
+        // Handle regenerate API key
+        if (isset($_POST['regenerate_api_key']) && check_admin_referer('gsheet_sftp_regenerate_key')) {
+            update_option('gsheet_sftp_api_key', wp_generate_password(32, false));
+            echo '<div class="notice notice-success"><p>' . __('API key regenerated successfully!', 'gsheet-sftp-sync') . '</p></div>';
+        }
+        
+        // Handle clear logs
+        if (isset($_POST['clear_logs']) && check_admin_referer('gsheet_sftp_clear_logs')) {
+            $log_file = GSHEET_SFTP_SYNC_PLUGIN_DIR . 'logs/sync.log';
+            if (file_exists($log_file)) {
+                unlink($log_file);
+            }
+            echo '<div class="notice notice-success"><p>' . __('Logs cleared!', 'gsheet-sftp-sync') . '</p></div>';
+        }
+        
+        $api_key = get_option('gsheet_sftp_api_key', '');
+        $endpoint_url = rest_url('gsheet-sftp/v1/upload');
+        ?>
+        <div class="wrap gsheet-sftp-wrap">
+            <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+            
+            <div class="gsheet-sftp-section">
+                <h2><?php _e('API Endpoint Information', 'gsheet-sftp-sync'); ?></h2>
+                <p><?php _e('Use these details in your Google Apps Script:', 'gsheet-sftp-sync'); ?></p>
+                
+                <table class="form-table">
+                    <tr>
+                        <th><?php _e('Endpoint URL', 'gsheet-sftp-sync'); ?></th>
+                        <td>
+                            <code class="gsheet-sftp-endpoint"><?php echo esc_url($endpoint_url); ?></code>
+                            <button type="button" class="button button-small" onclick="navigator.clipboard.writeText('<?php echo esc_js($endpoint_url); ?>')">
+                                <?php _e('Copy', 'gsheet-sftp-sync'); ?>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><?php _e('API Key', 'gsheet-sftp-sync'); ?></th>
+                        <td>
+                            <code class="gsheet-sftp-api-key"><?php echo esc_html($api_key); ?></code>
+                            <button type="button" class="button button-small" onclick="navigator.clipboard.writeText('<?php echo esc_js($api_key); ?>')">
+                                <?php _e('Copy', 'gsheet-sftp-sync'); ?>
+                            </button>
+                            <form method="post" style="display: inline; margin-left: 10px;">
+                                <?php wp_nonce_field('gsheet_sftp_regenerate_key'); ?>
+                                <button type="submit" name="regenerate_api_key" class="button button-small" onclick="return confirm('<?php _e('Are you sure? You will need to update your Google Apps Script.', 'gsheet-sftp-sync'); ?>')">
+                                    <?php _e('Regenerate', 'gsheet-sftp-sync'); ?>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            
+            <form method="post" action="options.php">
+                <?php settings_fields('gsheet_sftp_settings'); ?>
+                
+                <div class="gsheet-sftp-section">
+                    <h2><?php _e('SFTP Server Settings', 'gsheet-sftp-sync'); ?></h2>
+                    
+                    <table class="form-table">
+                        <tr>
+                            <th><label for="gsheet_sftp_host"><?php _e('SFTP Host', 'gsheet-sftp-sync'); ?></label></th>
+                            <td>
+                                <input type="text" id="gsheet_sftp_host" name="gsheet_sftp_host" 
+                                       value="<?php echo esc_attr(get_option('gsheet_sftp_host', '')); ?>" 
+                                       class="regular-text" placeholder="sftp.example.com or IP address">
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><label for="gsheet_sftp_port"><?php _e('SFTP Port', 'gsheet-sftp-sync'); ?></label></th>
+                            <td>
+                                <input type="number" id="gsheet_sftp_port" name="gsheet_sftp_port" 
+                                       value="<?php echo esc_attr(get_option('gsheet_sftp_port', 22)); ?>" 
+                                       class="small-text" min="1" max="65535">
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><label for="gsheet_sftp_username"><?php _e('Username', 'gsheet-sftp-sync'); ?></label></th>
+                            <td>
+                                <input type="text" id="gsheet_sftp_username" name="gsheet_sftp_username" 
+                                       value="<?php echo esc_attr(get_option('gsheet_sftp_username', '')); ?>" 
+                                       class="regular-text" autocomplete="off">
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><label for="gsheet_sftp_password"><?php _e('Password', 'gsheet-sftp-sync'); ?></label></th>
+                            <td>
+                                <input type="password" id="gsheet_sftp_password" name="gsheet_sftp_password" 
+                                       value="" class="regular-text" autocomplete="new-password"
+                                       placeholder="<?php echo get_option('gsheet_sftp_password') ? '••••••••' : ''; ?>">
+                                <p class="description"><?php _e('Leave blank to keep existing password.', 'gsheet-sftp-sync'); ?></p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><label for="gsheet_sftp_remote_path"><?php _e('Remote Path', 'gsheet-sftp-sync'); ?></label></th>
+                            <td>
+                                <input type="text" id="gsheet_sftp_remote_path" name="gsheet_sftp_remote_path" 
+                                       value="<?php echo esc_attr(get_option('gsheet_sftp_remote_path', '/')); ?>" 
+                                       class="regular-text" placeholder="/path/to/uploads/">
+                                <p class="description"><?php _e('Directory where files will be uploaded. Must end with /', 'gsheet-sftp-sync'); ?></p>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="gsheet-sftp-section">
+                    <h2><?php _e('Export Settings', 'gsheet-sftp-sync'); ?></h2>
+                    <p><?php _e('Configure how the Google Sheet export works. These settings are embedded in the generated Apps Script.', 'gsheet-sftp-sync'); ?></p>
+                    
+                    <table class="form-table">
+                        <tr>
+                            <th><label for="gsheet_sftp_schedule"><?php _e('Schedule', 'gsheet-sftp-sync'); ?></label></th>
+                            <td>
+                                <select id="gsheet_sftp_schedule" name="gsheet_sftp_schedule">
+                                    <option value="daily" <?php selected(get_option('gsheet_sftp_schedule', 'daily'), 'daily'); ?>><?php _e('Daily', 'gsheet-sftp-sync'); ?></option>
+                                    <option value="hourly" <?php selected(get_option('gsheet_sftp_schedule', 'daily'), 'hourly'); ?>><?php _e('Hourly', 'gsheet-sftp-sync'); ?></option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr id="daily-hour-row">
+                            <th><label for="gsheet_sftp_daily_hour"><?php _e('Daily Export Hour', 'gsheet-sftp-sync'); ?></label></th>
+                            <td>
+                                <select id="gsheet_sftp_daily_hour" name="gsheet_sftp_daily_hour">
+                                    <?php for ($h = 0; $h < 24; $h++): ?>
+                                    <option value="<?php echo $h; ?>" <?php selected(get_option('gsheet_sftp_daily_hour', 2), $h); ?>>
+                                        <?php echo sprintf('%02d:00', $h); ?>
+                                    </option>
+                                    <?php endfor; ?>
+                                </select>
+                                <p class="description"><?php _e('Hour of day to run export (in your timezone).', 'gsheet-sftp-sync'); ?></p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><label for="gsheet_sftp_filename_mode"><?php _e('Filename Mode', 'gsheet-sftp-sync'); ?></label></th>
+                            <td>
+                                <select id="gsheet_sftp_filename_mode" name="gsheet_sftp_filename_mode">
+                                    <option value="dated" <?php selected(get_option('gsheet_sftp_filename_mode', 'dated'), 'dated'); ?>><?php _e('Dated (new file each export)', 'gsheet-sftp-sync'); ?></option>
+                                    <option value="overwrite" <?php selected(get_option('gsheet_sftp_filename_mode', 'dated'), 'overwrite'); ?>><?php _e('Overwrite (same filename)', 'gsheet-sftp-sync'); ?></option>
+                                </select>
+                                <p class="description">
+                                    <strong><?php _e('Dated:', 'gsheet-sftp-sync'); ?></strong> <?php _e('Creates files like sheet_export_2026-01-07_120000.csv', 'gsheet-sftp-sync'); ?><br>
+                                    <strong><?php _e('Overwrite:', 'gsheet-sftp-sync'); ?></strong> <?php _e('Always uses the same filename, replacing the previous file', 'gsheet-sftp-sync'); ?>
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><label for="gsheet_sftp_base_filename"><?php _e('Base Filename', 'gsheet-sftp-sync'); ?></label></th>
+                            <td>
+                                <input type="text" id="gsheet_sftp_base_filename" name="gsheet_sftp_base_filename" 
+                                       value="<?php echo esc_attr(get_option('gsheet_sftp_base_filename', 'sheet_export')); ?>" 
+                                       class="regular-text" placeholder="sheet_export">
+                                <p class="description"><?php _e('Base name for exported files (without extension).', 'gsheet-sftp-sync'); ?></p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th><label for="gsheet_sftp_export_format"><?php _e('Export Format', 'gsheet-sftp-sync'); ?></label></th>
+                            <td>
+                                <select id="gsheet_sftp_export_format" name="gsheet_sftp_export_format">
+                                    <option value="csv" <?php selected(get_option('gsheet_sftp_export_format', 'csv'), 'csv'); ?>>CSV</option>
+                                    <option value="xlsx" <?php selected(get_option('gsheet_sftp_export_format', 'csv'), 'xlsx'); ?>>XLSX (Excel)</option>
+                                </select>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <?php submit_button(__('Save Settings', 'gsheet-sftp-sync')); ?>
+            </form>
+            
+            <script>
+            document.getElementById('gsheet_sftp_schedule').addEventListener('change', function() {
+                document.getElementById('daily-hour-row').style.display = this.value === 'daily' ? '' : 'none';
+            });
+            if (document.getElementById('gsheet_sftp_schedule').value !== 'daily') {
+                document.getElementById('daily-hour-row').style.display = 'none';
+            }
+            </script>
+            
+            <div class="gsheet-sftp-section">
+                <h2><?php _e('Test Connection', 'gsheet-sftp-sync'); ?></h2>
+                <p><?php _e('Test your SFTP connection with the current settings.', 'gsheet-sftp-sync'); ?></p>
+                <form method="post">
+                    <?php wp_nonce_field('gsheet_sftp_test_connection'); ?>
+                    <button type="submit" name="test_sftp_connection" class="button button-secondary">
+                        <?php _e('Test SFTP Connection', 'gsheet-sftp-sync'); ?>
+                    </button>
+                </form>
+            </div>
+            
+            <div class="gsheet-sftp-section">
+                <h2><?php _e('Recent Logs', 'gsheet-sftp-sync'); ?></h2>
+                <form method="post" style="margin-bottom: 10px;">
+                    <?php wp_nonce_field('gsheet_sftp_clear_logs'); ?>
+                    <button type="submit" name="clear_logs" class="button button-small">
+                        <?php _e('Clear Logs', 'gsheet-sftp-sync'); ?>
+                    </button>
+                </form>
+                <div class="gsheet-sftp-logs">
+                    <?php
+                    $logs = GSheet_SFTP_Sync::get_logs(50);
+                    if (empty($logs)) {
+                        echo '<span class="log-info">' . __('No logs yet.', 'gsheet-sftp-sync') . '</span>';
+                    } else {
+                        foreach ($logs as $log) {
+                            $class = 'log-info';
+                            if (strpos($log, '[error]') !== false) {
+                                $class = 'log-error';
+                            } elseif (strpos($log, '[success]') !== false) {
+                                $class = 'log-success';
+                            }
+                            echo '<div class="' . $class . '">' . esc_html($log) . '</div>';
+                        }
+                    }
+                    ?>
+                </div>
+            </div>
+            
+            <div class="gsheet-sftp-section">
+                <h2><?php _e('Google Apps Script', 'gsheet-sftp-sync'); ?></h2>
+                <p><?php _e('Copy the code below into your Google Sheet\'s Apps Script editor (Extensions → Apps Script):', 'gsheet-sftp-sync'); ?></p>
+                <p><a href="#" onclick="document.getElementById('apps-script-code').style.display='block'; this.style.display='none'; return false;" class="button">
+                    <?php _e('Show Google Apps Script Code', 'gsheet-sftp-sync'); ?>
+                </a></p>
+                <textarea id="apps-script-code" style="display:none; width:100%; height:400px; font-family:monospace; font-size:12px;" readonly><?php echo esc_textarea($this->get_apps_script_template()); ?></textarea>
+            </div>
+        </div>
+        <?php
+    }
+    
+    private function test_connection() {
+        $handler = GSheet_SFTP_Handler::get_instance();
+        $result = $handler->test_connection();
+        
+        if ($result['success']) {
+            echo '<div class="notice notice-success"><p>' . esc_html($result['message']) . '</p></div>';
+            GSheet_SFTP_Sync::log('SFTP connection test successful', 'success');
+        } else {
+            echo '<div class="notice notice-error"><p>' . esc_html($result['message']) . '</p></div>';
+            GSheet_SFTP_Sync::log('SFTP connection test failed: ' . $result['message'], 'error');
+        }
+    }
+    
+    private function get_apps_script_template() {
+        $endpoint_url = rest_url('gsheet-sftp/v1/upload');
+        $api_key = get_option('gsheet_sftp_api_key', '');
+        $schedule = get_option('gsheet_sftp_schedule', 'daily');
+        $daily_hour = get_option('gsheet_sftp_daily_hour', 2);
+        $filename_mode = get_option('gsheet_sftp_filename_mode', 'dated');
+        $base_filename = get_option('gsheet_sftp_base_filename', 'sheet_export');
+        $export_format = get_option('gsheet_sftp_export_format', 'csv');
+        $include_date = $filename_mode === 'dated' ? 'true' : 'false';
+        
+        return <<<SCRIPT
+/**
+ * Google Apps Script - Export Sheet to WordPress SFTP Plugin
+ * Generated by GSheet SFTP Sync Plugin
+ * 
+ * After pasting this code:
+ * 1. Save the project (Ctrl+S)
+ * 2. Run setupTrigger() once to enable automatic exports
+ * 3. Or use the SFTP Export menu after reloading the sheet
+ */
+
+const CONFIG = {
+  ENDPOINT_URL: '{$endpoint_url}',
+  API_KEY: '{$api_key}',
+  EXPORT_FORMAT: '{$export_format}',
+  INCLUDE_DATE: {$include_date},  // false = overwrite same file each time
+  BASE_FILENAME: '{$base_filename}',
+  SHEET_NAME: '',  // Leave empty for active sheet, or specify sheet name
+  SCHEDULE: '{$schedule}',
+  DAILY_HOUR: {$daily_hour},
+};
+
+function exportAndUpload() {
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = CONFIG.SHEET_NAME ? 
+      spreadsheet.getSheetByName(CONFIG.SHEET_NAME) : 
+      spreadsheet.getActiveSheet();
+    
+    if (!sheet) throw new Error('Sheet not found');
+    
+    const filename = generateFilename();
+    let fileContent;
+    
+    if (CONFIG.EXPORT_FORMAT === 'xlsx') {
+      fileContent = exportAsXlsx(spreadsheet);
+    } else {
+      fileContent = exportAsCsv(sheet);
+    }
+    
+    const base64Content = Utilities.base64Encode(fileContent);
+    const result = sendToEndpoint(base64Content, filename);
+    
+    Logger.log('Export completed: ' + JSON.stringify(result));
+    return result;
+    
+  } catch (error) {
+    Logger.log('Export failed: ' + error.message);
+    throw error;
+  }
+}
+
+function exportAsCsv(sheet) {
+  const data = sheet.getDataRange().getValues();
+  const csv = data.map(row => 
+    row.map(cell => {
+      if (cell instanceof Date) {
+        return Utilities.formatDate(cell, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+      }
+      const cellStr = String(cell);
+      if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\\n')) {
+        return '"' + cellStr.replace(/"/g, '""') + '"';
+      }
+      return cellStr;
+    }).join(',')
+  ).join('\\n');
+  
+  return Utilities.newBlob(csv, 'text/csv').getBytes();
+}
+
+function exportAsXlsx(spreadsheet) {
+  const url = 'https://docs.google.com/spreadsheets/d/' + spreadsheet.getId() + '/export?format=xlsx';
+  const response = UrlFetchApp.fetch(url, {
+    headers: { 'Authorization': 'Bearer ' + ScriptApp.getOAuthToken() }
+  });
+  return response.getContent();
+}
+
+function sendToEndpoint(base64Content, filename) {
+  const payload = {
+    file_content: base64Content,
+    filename: filename,
+    timestamp: new Date().toISOString()
+  };
+  
+  const response = UrlFetchApp.fetch(CONFIG.ENDPOINT_URL, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'X-API-Key': CONFIG.API_KEY },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  
+  if (response.getResponseCode() !== 200) {
+    throw new Error('Upload failed: ' + response.getContentText());
+  }
+  
+  return JSON.parse(response.getContentText());
+}
+
+function generateFilename() {
+  let filename = CONFIG.BASE_FILENAME;
+  if (CONFIG.INCLUDE_DATE) {
+    filename += '_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd_HHmmss');
+  }
+  return filename + '.' + CONFIG.EXPORT_FORMAT;
+}
+
+function setupTrigger() {
+  removeTriggers();
+  if (CONFIG.SCHEDULE === 'hourly') {
+    ScriptApp.newTrigger('exportAndUpload').timeBased().everyHours(1).create();
+  } else {
+    ScriptApp.newTrigger('exportAndUpload').timeBased().everyDays(1).atHour(CONFIG.DAILY_HOUR).create();
+  }
+  Logger.log('Trigger created');
+}
+
+function removeTriggers() {
+  ScriptApp.getProjectTriggers().forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'exportAndUpload') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('SFTP Export')
+    .addItem('Export Now', 'exportAndUpload')
+    .addItem('Setup Daily Trigger', 'setupTrigger')
+    .addItem('Remove Triggers', 'removeTriggers')
+    .addToUi();
+}
+SCRIPT;
+    }
+}
