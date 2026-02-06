@@ -4,7 +4,7 @@
 
 A free WordPress plugin that receives Google Sheets exports via API and uploads them to any SFTP server. Perfect for automated inventory feeds, data syncs, and backups.
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License](https://img.shields.io/badge/license-GPL--2.0-green)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple)
 ![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-blue)
@@ -270,6 +270,13 @@ You can create multiple Apps Scripts in the same sheet, each pointing to a diffe
 ---
 
 ## Changelog
+
+### 1.2.0
+- **Security:** Improved password encryption using AES-256-CBC with WordPress salts
+- **Security:** Added rate limiting (60 requests/minute) to prevent API abuse
+- Added `composer.json` for easier phpseclib dependency management
+- Added `index.php` security files to prevent directory listing
+- Updated WordPress compatibility to 6.7
 
 ### 1.1.0
 - Added Export Settings section in admin

@@ -29,6 +29,12 @@ class GSheet_SFTP_API_Endpoint {
     }
     
     public function verify_api_key($request) {
+        // Rate limiting: 60 requests per minute per IP
+        if (!$this->check_rate_limit()) {
+            GSheet_SFTP_Sync::log('Rate limit exceeded from ' . $this->get_client_ip(), 'error');
+            return new WP_Error('rate_limit_exceeded', 'Too many requests. Please try again later.', ['status' => 429]);
+        }
+        
         $stored_key = get_option('gsheet_sftp_api_key', '');
         
         if (empty($stored_key)) {
@@ -60,6 +66,33 @@ class GSheet_SFTP_API_Endpoint {
             return false;
         }
         
+        return true;
+    }
+    
+    private function get_client_ip() {
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $ips = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
+            $ip = trim($ips[0]);
+        }
+        return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '0.0.0.0';
+    }
+    
+    private function check_rate_limit() {
+        $ip = $this->get_client_ip();
+        $transient_key = 'gsheet_sftp_rate_' . md5($ip);
+        $requests = get_transient($transient_key);
+        
+        if ($requests === false) {
+            set_transient($transient_key, 1, 60);
+            return true;
+        }
+        
+        if ($requests >= 60) {
+            return false;
+        }
+        
+        set_transient($transient_key, $requests + 1, 60);
         return true;
     }
     

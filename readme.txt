@@ -4,8 +4,8 @@ Donate link: https://olivierbigras.com
 Plugin URI: https://olivierbigras.com
 Tags: google sheets, sftp, sync, automation, csv, export
 Requires at least: 5.0
-Tested up to: 6.4
-Stable tag: 1.1.0
+Tested up to: 6.7
+Stable tag: 1.2.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -85,6 +85,13 @@ Yes! Each Google Sheet can have its own Apps Script. They can all point to the s
 
 == Changelog ==
 
+= 1.2.0 =
+* Security: Improved password encryption using AES-256-CBC with WordPress salts
+* Security: Added rate limiting (60 requests/minute) to prevent API abuse
+* Added composer.json for easier phpseclib dependency management
+* Added index.php security files to prevent directory listing
+* Updated WordPress compatibility to 6.7
+
 = 1.1.0 =
 * Added Export Settings section in admin
 * New schedule options: Daily or Hourly
@@ -102,6 +109,9 @@ Yes! Each Google Sheet can have its own Apps Script. They can all point to the s
 * Google Apps Script generator
 
 == Upgrade Notice ==
+
+= 1.2.0 =
+Security improvements: Better password encryption and API rate limiting.
 
 = 1.1.0 =
 New export settings! Configure schedule, filename mode, and format directly in the plugin.

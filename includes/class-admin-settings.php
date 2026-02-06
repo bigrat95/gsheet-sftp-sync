@@ -66,8 +66,7 @@ class GSheet_SFTP_Admin_Settings {
         if (empty($password)) {
             return get_option('gsheet_sftp_password', '');
         }
-        // Simple obfuscation - in production, use proper encryption
-        return base64_encode($password);
+        return self::encrypt($password);
     }
     
     public static function get_password() {
@@ -75,7 +74,35 @@ class GSheet_SFTP_Admin_Settings {
         if (empty($encrypted)) {
             return '';
         }
-        return base64_decode($encrypted);
+        return self::decrypt($encrypted);
+    }
+    
+    private static function get_encryption_key() {
+        return hash('sha256', SECURE_AUTH_KEY . SECURE_AUTH_SALT, true);
+    }
+    
+    private static function encrypt($data) {
+        $key = self::get_encryption_key();
+        $iv = openssl_random_pseudo_bytes(16);
+        $encrypted = openssl_encrypt($data, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+        return base64_encode($iv . $encrypted);
+    }
+    
+    private static function decrypt($data) {
+        $key = self::get_encryption_key();
+        $data = base64_decode($data);
+        if ($data === false || strlen($data) < 17) {
+            // Fallback for legacy base64-only encoded passwords
+            $legacy = base64_decode(get_option('gsheet_sftp_password', ''));
+            if ($legacy !== false) {
+                return $legacy;
+            }
+            return '';
+        }
+        $iv = substr($data, 0, 16);
+        $encrypted = substr($data, 16);
+        $decrypted = openssl_decrypt($encrypted, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+        return $decrypted !== false ? $decrypted : '';
     }
     
     public function render_settings_page() {
