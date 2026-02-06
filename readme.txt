@@ -78,10 +78,9 @@ Yes! Each Google Sheet can have its own Apps Script. They can all point to the s
 
 == Screenshots ==
 
-1. Settings page with SFTP configuration
-2. API endpoint and key display
-3. Activity logs showing successful uploads
-4. Google Apps Script code generator
+1. Plugin settings page with SFTP server configuration
+2. Google Apps Script code generator with copy button
+3. Activity logs showing upload history and status
 
 == Changelog ==
 
