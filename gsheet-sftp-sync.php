@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: GSheet SFTP Sync
- * Plugin URI: https://olivierbigras.com
+ * Plugin URI: https://github.com/bigrat95/gsheet-sftp-sync/
  * Description: Receive Google Sheets exports via API and upload to SFTP server. Perfect for automated daily syncs from Google Sheets to your server.
  * Version: 1.2.0
  * Requires at least: 5.0
@@ -11,7 +11,6 @@
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: gsheet-sftp-sync
- * Domain Path: /languages
  */
 
 if (!defined('ABSPATH')) {
