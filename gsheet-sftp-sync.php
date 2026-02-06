@@ -8,7 +8,7 @@
  * Requires PHP: 7.4
  * Author: Olivier Bigras
  * Author URI: https://olivierbigras.com
- * License: GPL v2 or later
+ * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: gsheet-sftp-sync
  */
