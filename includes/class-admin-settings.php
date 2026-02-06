@@ -417,12 +417,16 @@ class GSheet_SFTP_Admin_Settings {
         $script .= "}\n\n";
         $script .= "function exportAsCsv(sheet) {\n";
         $script .= "  const data = sheet.getDataRange().getValues();\n";
-        $script .= "  const csv = data.map(row => \n";
+        $script .= "  const csv = data.map((row, rowIndex) => \n";
         $script .= "    row.map(cell => {\n";
         $script .= "      if (cell instanceof Date) {\n";
         $script .= "        return Utilities.formatDate(cell, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');\n";
         $script .= "      }\n";
-        $script .= "      const cellStr = String(cell);\n";
+        $script .= "      let cellStr = String(cell);\n";
+        $script .= "      // Clean newlines from header row (row 0) to fix WP All Import detection\n";
+        $script .= "      if (rowIndex === 0) {\n";
+        $script .= "        cellStr = cellStr.replace(/[\\r\\n]+/g, ' ').trim();\n";
+        $script .= "      }\n";
         $script .= '      if (cellStr.includes(\',\') || cellStr.includes(\'"\') || cellStr.includes(\'\\n\')) {' . "\n";
         $script .= '        return \'"\' + cellStr.replace(/"/g, \'""\') + \'"\';' . "\n";
         $script .= "      }\n";
