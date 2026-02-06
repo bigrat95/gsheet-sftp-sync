@@ -1,8 +1,8 @@
 === GSheet SFTP Sync ===
-Contributors: olivierbigras
+Contributors: bigrat95
 Donate link: https://olivierbigras.com
 Plugin URI: https://olivierbigras.com
-Tags: google sheets, sftp, sync, automation, csv, export
+Tags: google sheets, sftp, sync, automation, csv
 Requires at least: 5.0
 Tested up to: 6.9
 Stable tag: 1.2.0
