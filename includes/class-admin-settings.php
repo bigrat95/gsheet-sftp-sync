@@ -428,7 +428,7 @@ class GSheet_SFTP_Admin_Settings {
         $script .= "      }\n";
         $script .= "      return cellStr;\n";
         $script .= "    }).join(',')\n";
-        $script .= "  ).join('\\n');\n";
+        $script .= "  ).join('\\r\\n');\n";
         $script .= "  \n";
         $script .= "  return Utilities.newBlob(csv, 'text/csv').getBytes();\n";
         $script .= "}\n\n";
