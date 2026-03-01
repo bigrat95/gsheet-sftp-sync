@@ -70,9 +70,10 @@ class SFTP_Sync_GS_API_Endpoint {
     }
     
     private function get_client_ip() {
-        $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        $ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0' ) );
         if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            $ips = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
+            $forwarded = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) );
+            $ips = explode(',', $forwarded);
             $ip = trim($ips[0]);
         }
         return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '0.0.0.0';
@@ -123,16 +124,18 @@ class SFTP_Sync_GS_API_Endpoint {
         
         // Check for multipart file upload
         if (empty($file_content) && !empty($_FILES['file'])) {
-            if ($_FILES['file']['error'] !== UPLOAD_ERR_OK) {
-                SFTP_Sync_GS::log('File upload error: ' . intval($_FILES['file']['error']), 'error');
+            $upload_error = intval($_FILES['file']['error']);
+            if ($upload_error !== UPLOAD_ERR_OK) {
+                SFTP_Sync_GS::log('File upload error: ' . $upload_error, 'error');
                 return new WP_REST_Response([
                     'success' => false,
-                    'error' => 'File upload error: ' . $_FILES['file']['error']
+                    'error' => 'File upload error: ' . $upload_error
                 ], 400);
             }
             
-            $file_content = file_get_contents($_FILES['file']['tmp_name']);
-            $filename = $_FILES['file']['name'] ?? 'export_' . gmdate('Y-m-d_His') . '.csv';
+            $tmp_name = sanitize_text_field($_FILES['file']['tmp_name']);
+            $file_content = file_get_contents($tmp_name);
+            $filename = isset($_FILES['file']['name']) ? sanitize_file_name($_FILES['file']['name']) : 'export_' . gmdate('Y-m-d_His') . '.csv';
         }
         
         if (empty($file_content)) {

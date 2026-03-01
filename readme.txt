@@ -78,11 +78,17 @@ Yes! Each Google Sheet can have its own Apps Script. They can all point to the s
 
 == Screenshots ==
 
-1. Plugin settings page with SFTP server configuration
-2. Google Apps Script code generator with copy button
-3. Activity logs showing upload history and status
+1. Plugin settings page with API endpoint information and SFTP server configuration
+2. Export settings with schedule, filename mode, and format options
+3. Activity logs and Google Apps Script code generator
 
 == Changelog ==
+
+= 1.5.0 =
+* WordPress.org initial release
+* Improved code quality based on plugin review feedback
+* Moved log storage to wp-content/uploads for better security
+* Updated WordPress compatibility to 6.9
 
 = 1.4.0 =
 * Renamed plugin to "SFTP Sync for Google Sheets" for WordPress.org compliance
@@ -126,6 +132,9 @@ Yes! Each Google Sheet can have its own Apps Script. They can all point to the s
 * Google Apps Script generator
 
 == Upgrade Notice ==
+
+= 1.5.0 =
+WordPress.org initial release with improved security and code quality.
 
 = 1.4.0 =
 Renamed plugin for WordPress.org compliance. Fixed escaping and sanitization issues.
