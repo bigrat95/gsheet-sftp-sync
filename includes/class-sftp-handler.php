@@ -23,15 +23,30 @@ class SFTP_Sync_GS_Handler {
             'remote_path' => get_option('gsheet_sftp_remote_path', '/'),
         ];
     }
+
+    private function get_config_error($config) {
+        if ($config['host'] === '' || $config['username'] === '') {
+            return 'SFTP configuration incomplete. Please fill in host and username.';
+        }
+
+        if ($config['password'] === '') {
+            if (SFTP_Sync_GS_Admin_Settings::password_needs_reentry()) {
+                return 'Stored SFTP password could not be decrypted. WordPress security keys may have changed. Re-enter the SFTP password and click Save Settings.';
+            }
+            return 'SFTP password is missing. Please enter it in plugin settings and save.';
+        }
+
+        return null;
+    }
     
     public function upload_file($file_content, $filename) {
         $config = $this->get_config();
         
-        // Validate config
-        if (empty($config['host']) || empty($config['username']) || empty($config['password'])) {
+        $config_error = $this->get_config_error($config);
+        if ($config_error) {
             return [
                 'success' => false,
-                'error' => 'SFTP configuration incomplete. Please check plugin settings.'
+                'error' => $config_error
             ];
         }
         
@@ -185,10 +200,11 @@ class SFTP_Sync_GS_Handler {
     public function test_connection() {
         $config = $this->get_config();
         
-        if (empty($config['host']) || empty($config['username']) || empty($config['password'])) {
+        $config_error = $this->get_config_error($config);
+        if ($config_error) {
             return [
                 'success' => false,
-                'message' => 'SFTP configuration incomplete. Please fill in all fields.'
+                'message' => $config_error
             ];
         }
         

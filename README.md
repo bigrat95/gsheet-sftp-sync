@@ -4,7 +4,7 @@
 
 A WordPress plugin that receives Google Sheets exports via API and uploads them to any SFTP server. Useful for automated inventory feeds, data syncs, and backups.
 
-![Version](https://img.shields.io/badge/version-1.5.0-blue)
+![Version](https://img.shields.io/badge/version-1.5.1-blue)
 ![License](https://img.shields.io/badge/license-GPL--2.0-green)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple)
 ![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-blue)
@@ -270,6 +270,11 @@ You can create multiple Apps Scripts in the same sheet, each pointing to a diffe
 ---
 
 ## Changelog
+
+### 1.5.1
+- Fixed SFTP password becoming unreadable after WordPress salt/key rotation
+- Password encryption now uses a stable plugin key instead of WordPress salts
+- Clearer admin error when the stored password must be re-entered
 
 ### 1.5.0
 - WordPress.org initial release

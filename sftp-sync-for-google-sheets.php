@@ -3,7 +3,7 @@
  * Plugin Name: SFTP Sync for Google Sheets
  * Plugin URI: https://github.com/bigrat95/sftp-sync-for-google-sheets/
  * Description: Receive Google Sheets exports via API and upload to SFTP server. Automate daily syncs from Google Sheets to your server.
- * Version: 1.5.0
+ * Version: 1.5.1
  * Requires at least: 5.0
  * Requires PHP: 7.4
  * Author: Olivier Bigras
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('SFTP_SYNC_GS_VERSION', '1.5.0');
+define('SFTP_SYNC_GS_VERSION', '1.5.1');
 define('SFTP_SYNC_GS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SFTP_SYNC_GS_PLUGIN_URL', plugin_dir_url(__FILE__));
 

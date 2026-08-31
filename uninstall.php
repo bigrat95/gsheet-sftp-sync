@@ -16,6 +16,7 @@ delete_option('gsheet_sftp_host');
 delete_option('gsheet_sftp_port');
 delete_option('gsheet_sftp_username');
 delete_option('gsheet_sftp_password');
+delete_option('gsheet_sftp_enc_key');
 delete_option('gsheet_sftp_remote_path');
 delete_option('gsheet_sftp_schedule');
 delete_option('gsheet_sftp_daily_hour');

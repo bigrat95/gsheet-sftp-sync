@@ -96,7 +96,7 @@ class SFTP_Sync_GS_Admin_Settings {
     }
     
     public function encrypt_password($password) {
-        if (empty($password)) {
+        if ($password === '' || $password === null) {
             return get_option('gsheet_sftp_password', '');
         }
         return self::encrypt($password);
@@ -104,38 +104,103 @@ class SFTP_Sync_GS_Admin_Settings {
     
     public static function get_password() {
         $encrypted = get_option('gsheet_sftp_password', '');
-        if (empty($encrypted)) {
+        if ($encrypted === '' || $encrypted === false) {
             return '';
         }
-        return self::decrypt($encrypted);
+
+        $plugin_key = self::get_plugin_encryption_key(false);
+        if ($plugin_key) {
+            $decrypted = self::decrypt_with_key($encrypted, $plugin_key);
+            if ($decrypted !== null) {
+                return $decrypted;
+            }
+        }
+
+        // Legacy: key derived from WordPress salts (breaks when salts rotate).
+        $legacy_key = hash('sha256', SECURE_AUTH_KEY . SECURE_AUTH_SALT, true);
+        $decrypted = self::decrypt_with_key($encrypted, $legacy_key);
+        if ($decrypted !== null) {
+            self::persist_reencrypted_password($decrypted);
+            return $decrypted;
+        }
+
+        // Legacy: password stored as base64(plaintext).
+        $legacy = base64_decode($encrypted, true);
+        if (is_string($legacy) && $legacy !== '' && preg_match('/^[\x20-\x7E]+$/', $legacy)) {
+            self::persist_reencrypted_password($legacy);
+            return $legacy;
+        }
+
+        return '';
+    }
+
+    /**
+     * True when a password is stored but cannot be decrypted (e.g. WP salts changed).
+     */
+    public static function password_needs_reentry() {
+        $stored = get_option('gsheet_sftp_password', '');
+        return $stored !== '' && $stored !== false && self::get_password() === '';
     }
     
-    private static function get_encryption_key() {
-        return hash('sha256', SECURE_AUTH_KEY . SECURE_AUTH_SALT, true);
+    /**
+     * Stable plugin key stored in the database so WordPress salt rotation
+     * (Solid Security, Kinsta, etc.) does not invalidate the SFTP password.
+     */
+    private static function get_plugin_encryption_key($create = false) {
+        $stored = get_option('gsheet_sftp_enc_key', '');
+        if ($stored) {
+            $decoded = base64_decode($stored, true);
+            if ($decoded !== false && strlen($decoded) === 32) {
+                return $decoded;
+            }
+        }
+
+        if (!$create) {
+            return null;
+        }
+
+        $key = random_bytes(32);
+        update_option('gsheet_sftp_enc_key', base64_encode($key), false);
+        return $key;
+    }
+
+    private static function persist_reencrypted_password($plaintext) {
+        update_option('gsheet_sftp_password', self::encrypt($plaintext), false);
     }
     
     private static function encrypt($data) {
-        $key = self::get_encryption_key();
-        $iv = openssl_random_pseudo_bytes(16);
+        $key = self::get_plugin_encryption_key(true);
+        $iv = random_bytes(16);
         $encrypted = openssl_encrypt($data, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
-        return base64_encode($iv . $encrypted);
+        $hmac = hash_hmac('sha256', $iv . $encrypted, $key, true);
+        return 'v2:' . base64_encode($iv . $hmac . $encrypted);
     }
-    
-    private static function decrypt($data) {
-        $key = self::get_encryption_key();
-        $data = base64_decode($data);
-        if ($data === false || strlen($data) < 17) {
-            // Fallback for legacy base64-only encoded passwords
-            $legacy = base64_decode(get_option('gsheet_sftp_password', ''));
-            if ($legacy !== false) {
-                return $legacy;
+
+    private static function decrypt_with_key($data, $key) {
+        if (strpos($data, 'v2:') === 0) {
+            $raw = base64_decode(substr($data, 3), true);
+            if ($raw === false || strlen($raw) < 49) {
+                return null;
             }
-            return '';
+            $iv = substr($raw, 0, 16);
+            $hmac = substr($raw, 16, 32);
+            $encrypted = substr($raw, 48);
+            $expected = hash_hmac('sha256', $iv . $encrypted, $key, true);
+            if (!hash_equals($expected, $hmac)) {
+                return null;
+            }
+            $decrypted = openssl_decrypt($encrypted, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+            return ($decrypted !== false && $decrypted !== '') ? $decrypted : null;
         }
-        $iv = substr($data, 0, 16);
-        $encrypted = substr($data, 16);
+
+        $raw = base64_decode($data, true);
+        if ($raw === false || strlen($raw) < 17) {
+            return null;
+        }
+        $iv = substr($raw, 0, 16);
+        $encrypted = substr($raw, 16);
         $decrypted = openssl_decrypt($encrypted, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
-        return $decrypted !== false ? $decrypted : '';
+        return ($decrypted !== false && $decrypted !== '') ? $decrypted : null;
     }
     
     public function render_settings_page() {
@@ -168,9 +233,16 @@ class SFTP_Sync_GS_Admin_Settings {
         
         $api_key = get_option('gsheet_sftp_api_key', '');
         $endpoint_url = rest_url('gsheet-sftp/v1/upload');
+        $password_needs_reentry = self::password_needs_reentry();
+        $has_stored_password = (bool) get_option('gsheet_sftp_password', '');
         ?>
         <div class="wrap gsheet-sftp-wrap">
             <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+            <?php if ($password_needs_reentry) : ?>
+                <div class="notice notice-error">
+                    <p><?php esc_html_e('The saved SFTP password could not be decrypted. This usually happens after WordPress security keys/salts are rotated (for example by Solid Security). Re-enter the SFTP password below and click Save Settings, then test the connection.', 'sftp-sync-for-google-sheets'); ?></p>
+                </div>
+            <?php endif; ?>
             
             <div class="gsheet-sftp-section">
                 <h2><?php esc_html_e('API Endpoint Information', 'sftp-sync-for-google-sheets'); ?></h2>
@@ -240,8 +312,12 @@ class SFTP_Sync_GS_Admin_Settings {
                             <td>
                                 <input type="password" id="gsheet_sftp_password" name="gsheet_sftp_password" 
                                        value="" class="regular-text" autocomplete="new-password"
-                                       placeholder="<?php echo get_option('gsheet_sftp_password') ? '••••••••' : ''; ?>">
-                                <p class="description"><?php esc_html_e('Leave blank to keep existing password.', 'sftp-sync-for-google-sheets'); ?></p>
+                                       placeholder="<?php echo $password_needs_reentry ? esc_attr__('Re-enter password', 'sftp-sync-for-google-sheets') : ($has_stored_password ? '••••••••' : ''); ?>">
+                                <?php if ($password_needs_reentry) : ?>
+                                    <p class="description" style="color:#d63638;"><?php esc_html_e('The stored password is unreadable. You must type it again and save.', 'sftp-sync-for-google-sheets'); ?></p>
+                                <?php else : ?>
+                                    <p class="description"><?php esc_html_e('Leave blank to keep existing password.', 'sftp-sync-for-google-sheets'); ?></p>
+                                <?php endif; ?>
                             </td>
                         </tr>
                         <tr>
@@ -323,7 +399,7 @@ class SFTP_Sync_GS_Admin_Settings {
             
             <div class="gsheet-sftp-section">
                 <h2><?php esc_html_e('Test Connection', 'sftp-sync-for-google-sheets'); ?></h2>
-                <p><?php esc_html_e('Test your SFTP connection with the current settings.', 'sftp-sync-for-google-sheets'); ?></p>
+                <p><?php esc_html_e('Test your SFTP connection with the currently saved settings. Click Save Settings first if you changed the password or server details.', 'sftp-sync-for-google-sheets'); ?></p>
                 <form method="post">
                     <?php wp_nonce_field('gsheet_sftp_test_connection'); ?>
                     <button type="submit" name="test_sftp_connection" class="button button-secondary">
