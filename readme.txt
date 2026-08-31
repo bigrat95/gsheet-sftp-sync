@@ -5,7 +5,7 @@ Plugin URI: https://olivierbigras.com
 Tags: google sheets, sftp, sync, automation, csv
 Requires at least: 5.0
 Tested up to: 6.9
-Stable tag: 1.5.1
+Stable tag: 1.5.2
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -84,6 +84,10 @@ Yes! Each Google Sheet can have its own Apps Script. They can all point to the s
 
 == Changelog ==
 
+= 1.5.2 =
+* Fixed Save Settings wiping the API key, which caused Google Apps Script exports to return 401 rest_forbidden
+* Google Apps Script now also sends the API key in the request body as a fallback
+
 = 1.5.1 =
 * Fixed SFTP password becoming unreadable after WordPress salt/key rotation
 * Password encryption now uses a stable plugin key instead of WordPress salts
@@ -137,6 +141,9 @@ Yes! Each Google Sheet can have its own Apps Script. They can all point to the s
 * Google Apps Script generator
 
 == Upgrade Notice ==
+
+= 1.5.2 =
+Fixes Save Settings wiping the API key (401 errors from Google Apps Script). After updating, copy the current API key into your Apps Script.
 
 = 1.5.1 =
 Fixes SFTP password decryption after WordPress security keys are rotated. Re-enter your SFTP password once after updating.

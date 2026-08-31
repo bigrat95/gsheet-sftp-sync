@@ -48,11 +48,6 @@ class SFTP_Sync_GS_Admin_Settings {
     }
     
     public function register_settings() {
-        // API Settings
-        register_setting('gsheet_sftp_settings', 'gsheet_sftp_api_key', [
-            'sanitize_callback' => 'sanitize_text_field'
-        ]);
-        
         // SFTP Settings
         register_setting('gsheet_sftp_settings', 'gsheet_sftp_host', [
             'sanitize_callback' => 'sanitize_text_field'
@@ -232,6 +227,11 @@ class SFTP_Sync_GS_Admin_Settings {
         }
         
         $api_key = get_option('gsheet_sftp_api_key', '');
+        if ($api_key === '') {
+            $api_key = wp_generate_password(32, false);
+            update_option('gsheet_sftp_api_key', $api_key);
+            echo '<div class="notice notice-warning"><p>' . esc_html__('A new API key was generated because none was stored. Update CONFIG.API_KEY in your Google Apps Script to match the key on this page.', 'sftp-sync-for-google-sheets') . '</p></div>';
+        }
         $endpoint_url = rest_url('gsheet-sftp/v1/upload');
         $password_needs_reentry = self::password_needs_reentry();
         $has_stored_password = (bool) get_option('gsheet_sftp_password', '');
@@ -541,7 +541,8 @@ class SFTP_Sync_GS_Admin_Settings {
         $script .= "  const payload = {\n";
         $script .= "    file_content: base64Content,\n";
         $script .= "    filename: filename,\n";
-        $script .= "    timestamp: new Date().toISOString()\n";
+        $script .= "    timestamp: new Date().toISOString(),\n";
+        $script .= "    api_key: CONFIG.API_KEY\n";
         $script .= "  };\n";
         $script .= "  \n";
         $script .= "  const response = UrlFetchApp.fetch(CONFIG.ENDPOINT_URL, {\n";
